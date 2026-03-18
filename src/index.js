@@ -163,6 +163,56 @@ app.delete('/api/menu/:id', async (req, res) => {
     res.status(500).json({ error: "Failed to delete item" });
   }
 });
+// ... पुराने imports और prisma init ...
+
+// 🍔 नया आर्डर प्लेस करने का API (बिल्कुल सुरक्षित)
+app.post('/api/orders', async (req, res) => {
+  try {
+    const { userName, userPhone, restaurantId, items, totalAmount } = req.body;
+
+    // 1. ग्राहक को खोजें (अगर पहले आ चुका है)
+    let user = await prisma.user.findFirst({ where: { phone: userPhone } });
+    
+    // अगर ग्राहक नया है, तो डेटाबेस में उसका नाम-नंबर सेव करें
+    if (!user) {
+      user = await prisma.user.create({ 
+        data: { name: userName, phone: userPhone, role: 'CUSTOMER' } 
+      });
+    }
+
+    // 2. आर्डर बनाएँ (सारे पुराने ज़रूरी फील्ड्स के साथ)
+    const newOrder = await prisma.order.create({
+      data: {
+        userId: user.id,
+        restaurantId: restaurantId,
+        totalAmount: totalAmount,
+        taxAmount: totalAmount * 0.05, // 5% GST (डेटाबेस के लिए ज़रूरी)
+        orderNumber: "ETR-" + Math.floor(1000 + Math.random() * 9000), // आर्डर नंबर
+        status: 'PENDING',
+        items: { 
+          create: items.map(i => ({ 
+            menuItemId: i.menuItemId, 
+            quantity: 1, 
+            priceAtOrder: i.price 
+          })) 
+        }
+      }
+    });
+
+    res.json({ message: "Order Placed!", data: newOrder });
+  } catch (error) { 
+    console.error("Backend Error:", error);
+    res.status(500).json({ error: error.message }); 
+  }
+});
+
+app.post('/api/orders/update-status', async (req, res) => {
+  const { orderId, status } = req.body;
+  const updated = await prisma.order.update({ where: { id: orderId }, data: { status } });
+  res.json(updated);
+});
+
+// ... app.listen ...
 app.listen(PORT, () => {
   console.log(`✅ Eater Server is running on http://localhost:${PORT}`);
 });
