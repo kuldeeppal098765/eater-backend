@@ -46,6 +46,16 @@ app.post('/api/restaurants', async (req, res) => {
     res.status(500).json({ error: "Failed to add restaurant" });
   }
 });
+// 🏪 सारे रजिस्टर्ड रेस्टोरेंट्स को होमपेज पर दिखाने का API
+app.get('/api/restaurants', async (req, res) => {
+  try {
+    const allRestaurants = await prisma.restaurant.findMany();
+    res.json({ data: allRestaurants });
+  } catch (error) {
+    console.error("Fetch Restaurants Error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
 // 5. रेस्टोरेंट में मेन्यू आइटम जोड़ने का API
 app.post('/api/menu', async (req, res) => {
   try {
