@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = "postgresql://neondb_owner:npg_8tMFHCUqp4TW@ep-falling-lab-am4ohvcc-pooler.c-5.us-east-1.aws.neon.tech/neondb?sslmode=require&pgbouncer=true"
+}
+
+model User {
+  id            String   @id @default(uuid())
+  phone         String   @unique
+  name          String?
+  role          Role     @default(CUSTOMER)
+  dpdpaConsent  Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  
+  orders        Order[]  @relation("UserOrders")
+  addresses     Address[]
+}
+
+model Address {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  type        String   @default("HOME")
+  fullAddress String
+  latitude    Float?
+  longitude   Float?
+}
+
+model Restaurant {
+  id          String   @id @default(uuid())
+  name        String
+  fssaiNo     String?
+  isActive    Boolean  @default(true)
+  latitude    Float?
+  longitude   Float?
+  ownerId     String?
+  
+  menuItems   MenuItem[]
+  orders      Order[]
+}
+
+model MenuItem {
+  id           String     @id @default(uuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  name         String
+  description  String?
+  price        Float
+  isVeg        Boolean    @default(true)
+  category     String
+  isAvailable  Boolean    @default(true)
+  
+  orderItems   OrderItem[]
+}
+
+model Order {
+  id           String      @id @default(uuid())
+  orderNumber  String      @unique 
+  userId       String
+  user         User        @relation("UserOrders", fields: [userId], references: [id])
+  restaurantId String
+  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id])
+  
+  status       OrderStatus @default(PENDING)
+  totalAmount  Float
+  taxAmount    Float       
+  
+  deliveryOtp  String?     
+  createdAt    DateTime    @default(now())
+  
+  items        OrderItem[]
+}
+
+model OrderItem {
+  id         String   @id @default(uuid())
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id])
+  menuItemId String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
+  quantity   Int
+  priceAtOrder Float  
+}
+
+enum Role {
+  CUSTOMER
+  PARTNER
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  ACCEPTED
+  PREPARING
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
