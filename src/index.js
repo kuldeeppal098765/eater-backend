@@ -117,20 +117,22 @@ app.post('/api/orders', async (req, res) => {
     res.status(500).json({ error: "Failed to place order" });
   }
 });
-// 8. सारे ऑर्डर्स की लिस्ट देखने का API (Admin के लिए)
+// 📦 सारे आर्डर्स मंगाने का API (आइटम्स के नाम के साथ)
 app.get('/api/orders', async (req, res) => {
   try {
     const allOrders = await prisma.order.findMany({
       include: {
-        user: true,        // ग्राहक की जानकारी भी दिखेगी
-        items: {           // ऑर्डर में क्या-क्या है, वो भी दिखेगा
-          include: { menuItem: true }
+        user: true, 
+        items: {
+          include: {
+            menuItem: true // 👈 यह लाइन जादू करेगी! (डिश का नाम लाएगी)
+          }
         }
       }
     });
     res.json(allOrders);
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch orders" });
+    res.status(500).json({ error: error.message });
   }
 });
 // 9. ऑर्डर का स्टेटस अपडेट करने का API (PATCH Method)
