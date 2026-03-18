@@ -211,7 +211,26 @@ app.post('/api/orders/update-status', async (req, res) => {
   const updated = await prisma.order.update({ where: { id: orderId }, data: { status } });
   res.json(updated);
 });
+// 🏪 नए रेस्टोरेंट (Vendor) को रजिस्टर करने का API
+app.post('/api/restaurants', async (req, res) => {
+  try {
+    const { name, ownerName, phone, fssai } = req.body;
 
+    // डेटाबेस में नया रेस्टोरेंट बनाएँ
+    // (अभी हम सिर्फ नाम सेव कर रहे हैं ताकि Prisma एरर न दे)
+    const newRestaurant = await prisma.restaurant.create({
+      data: {
+        name: name,
+        location: "Kanpur/Unnao", // डिफ़ॉल्ट लोकेशन
+      }
+    });
+
+    res.json({ message: "Registration Successful", data: newRestaurant });
+  } catch (error) {
+    console.error("Vendor Registration Error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
 // ... app.listen ...
 app.listen(PORT, () => {
   console.log(`✅ Eater Server is running on http://localhost:${PORT}`);
