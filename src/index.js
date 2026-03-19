@@ -136,19 +136,21 @@ app.get('/api/orders', async (req, res) => {
   }
 });
 // 9. ऑर्डर का स्टेटस अपडेट करने का API (PATCH Method)
+// 📦 आर्डर स्टेटस अपडेट करने का API (सच उगलने वाला वर्ज़न)
 app.post('/api/orders/update-status', async (req, res) => {
   try {
-    const { orderId, status } = req.body; // status में 'DELIVERED' या 'CANCELLED' भेजेंगे
-
+    const { orderId, status } = req.body;
+    
     const updatedOrder = await prisma.order.update({
       where: { id: orderId },
-      data: { status: status },
+      data: { status }
     });
-
-    res.json({ message: `Order status updated to ${status}! ✅`, data: updatedOrder });
+    
+    res.json(updatedOrder);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Failed to update order status" });
+    console.error("Status Update Error:", error);
+    // 🚨 यहाँ हमने बदलाव किया है: अब बैकएंड अपनी असली गलती बताएगा!
+    res.status(500).json({ error: error.message || "Something went wrong in backend" }); 
   }
 });
 // 🚚 ऑर्डर स्टेटस अपडेट करने का रास्ता (PATCH)
