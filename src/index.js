@@ -26,7 +26,11 @@ const { attachLiveChatSocket } = require('./liveChatSocket');
 
 const app = express();
 /** JSON + form body parsers must run before any `/api` route (e.g. Paytm initiate) to avoid empty-body checksum errors. */
-app.use(cors());
+app.use(cors({
+  origin: '*', // यह किसी भी साइट (जैसे Vercel) को डेटा लेने की अनुमति दे देगा
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: process.env.JSON_BODY_LIMIT || '25mb' }));
 
