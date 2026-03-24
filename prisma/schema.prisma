@@ -3,20 +3,29 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = "postgresql://neondb_owner:npg_8tMFHCUqp4TW@ep-falling-lab-am4ohvcc-pooler.c-5.us-east-1.aws.neon.tech/neondb?sslmode=require&pgbouncer=true"
+  provider = "sqlite"
+  url      = "file:./dev.db"
 }
 
 model User {
-  id            String   @id @default(uuid())
-  phone         String   @unique
-  name          String?
-  role          Role     @default(CUSTOMER)
-  dpdpaConsent  Boolean  @default(true)
-  createdAt     DateTime @default(now())
+  id               String    @id @default(uuid())
+  phone            String    @unique
+  email            String?   @unique
+  name             String?
+  role             String    @default("CUSTOMER") // SQLite के लिए String बिल्कुल सही है
+  dpdpaConsent     Boolean   @default(true)
+  isPhoneVerified  Boolean   @default(false)
+  isEmailVerified  Boolean   @default(false)
+  otpCode          String?
+  otpExpiry        DateTime?
+  bankDetails      String?   // JSON: bankName, accountNumber, ifsc
+  /** Last known customer location (optional; used for distance features) */
+  latitude         Float?
+  longitude        Float?
+  createdAt        DateTime  @default(now())
   
-  orders        Order[]  @relation("UserOrders")
-  addresses     Address[]
+  orders           Order[]   @relation("UserOrders")
+  addresses        Address[]
 }
 
 model Address {
@@ -30,71 +39,177 @@ model Address {
 }
 
 model Restaurant {
-  id          String   @id @default(uuid())
-  name        String
-  fssaiNo     String?
-  isActive    Boolean  @default(true)
-  latitude    Float?
-  longitude   Float?
-  ownerId     String?
-  
-  menuItems   MenuItem[]
-  orders      Order[]
+  id             String     @id @default(uuid())
+  name           String
+  ownerName      String?    
+  phone          String?    
+  email          String?    @unique
+  address        String?    
+  fssaiNo        String?
+  gstNo          String?    // GSTIN — edits trigger re-verification when changed
+  coverImageUrl  String?    // Outlet hero / listing image (data URL or CDN URL)
+  bankDetails    String?    // JSON: bankName, accountNumber, ifsc
+  isPhoneVerified  Boolean  @default(false)
+  isEmailVerified  Boolean  @default(false)
+  otpCode        String?
+  otpExpiry      DateTime?
+  isActive       Boolean    @default(true)
+  /** Accepting orders on the marketplace right now (manual or automatic by schedule). */
+  isOnline       Boolean    @default(true)
+  /** Daily open time (IST), 24h "HH:mm". */
+  openingTime    String     @default("10:00")
+  /** Daily close time (IST), 24h "HH:mm". */
+  closingTime    String     @default("22:00")
+  /** When true, a scheduler sets isOnline from opening/closing times (IST). */
+  isAutoToggleEnabled Boolean @default(false)
+  approvalStatus String     @default("PENDING") // PENDING, APPROVED, REJECTED, INFO_NEEDED
+  adminMessage   String?    // 👈 NEW: एडमिन की वार्निंग या मेसेज सेव करने के लिए
+  partnerDocuments   String? // JSON: uploaded KYC docs (partner onboarding)
+  partnerLastMessage String? // Last note partner sent to admin during verification
+  latitude       Float?
+  longitude      Float?
+  ownerId        String?
+  /** INR credits for self-serve offers; activating a partner coupon reserves `budget` from here */
+  marketingWallet Float @default(5000)
+
+  menuItems      MenuItem[]
+  orders         Order[]
+  coupons        Coupon[]
 }
 
+// 🥗 अपडेटेड: मेन्यू आइटम (फ्रंटएंड के एडवांस डिज़ाइन के अनुसार)
 model MenuItem {
   id           String     @id @default(uuid())
   restaurantId String
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
   name         String
   description  String?
-  price        Float
+  
+  // 🛠️ नए एडवांस कॉलम जोड़े गए हैं
+  fullPrice    Float      @default(0)
+  halfPrice    Float?     // Half रेट (Optional)
+  hasHalf      Boolean    @default(false)
+  quantityText String?    // जैसे: "500 gm", "2 Pieces"
+  photoUrl     String?    // डिश की फोटो का लिंक
+  
   isVeg        Boolean    @default(true)
-  category     String
+  category     String?    @default("General")
   isAvailable  Boolean    @default(true)
+  menuReviewStatus String  @default("APPROVED") // APPROVED | PENDING (until outlet live)
   
   orderItems   OrderItem[]
 }
 
 model Order {
-  id           String      @id @default(uuid())
-  orderNumber  String      @unique 
-  userId       String
-  user         User        @relation("UserOrders", fields: [userId], references: [id])
-  restaurantId String
-  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id])
+  id                      String      @id @default(uuid())
+  orderNumber             String      @unique
+  userId                  String
+  restaurantId            String
+  riderId                 String?     
   
-  status       OrderStatus @default(PENDING)
-  totalAmount  Float
-  taxAmount    Float       
+  // 💰 पेआउट और ट्रांज़ैक्शन ट्रैकिंग
+  riderPaymentStatus      String      @default("PENDING") // PENDING या PAID
+  riderTxnId              String?     
   
-  deliveryOtp  String?     
-  createdAt    DateTime    @default(now())
-  
-  items        OrderItem[]
+  restaurantPaymentStatus String      @default("PENDING") // PENDING या PAID
+  restaurantTxnId         String?     
+
+  status                  String      @default("PENDING")
+  totalAmount             Float
+  taxAmount               Float       @default(0)
+  paymentMethod           String      @default("COD")
+  paymentStatus           String      @default("PENDING")
+  /** Paytm / online gateway transaction id after a successful authorize (for support and reconciliation) */
+  paytmTxnId              String?
+
+  deliveryAddress         String?     // 👈 यह नई लाइन यहाँ जोड़ दी गई है!
+
+  /** JSON snapshot from checkout: fees, GST lines, grandTotal, riderPayout, distanceKm */
+  billBreakdown           String?
+
+  /** Kitchen prep time in minutes (set by partner workflow; 0 until known) */
+  prepTime                Int         @default(0)
+  /** Promised delivery arrival time (extended via extend-eta) */
+  deliveryETA             DateTime?
+
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+
+  user                    User        @relation("UserOrders", fields: [userId], references: [id])
+  restaurant              Restaurant  @relation(fields: [restaurantId], references: [id])
+  rider                   Rider?      @relation(fields: [riderId], references: [id])
+  items                   OrderItem[]
 }
 
 model OrderItem {
-  id         String   @id @default(uuid())
-  orderId    String
-  order      Order    @relation(fields: [orderId], references: [id])
-  menuItemId String
-  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
-  quantity   Int
+  id           String   @id @default(uuid())
+  orderId      String
+  order        Order    @relation(fields: [orderId], references: [id])
+  menuItemId   String
+  menuItem     MenuItem @relation(fields: [menuItemId], references: [id])
+  quantity     Int
   priceAtOrder Float  
 }
 
-enum Role {
-  CUSTOMER
-  PARTNER
-  ADMIN
+// ==========================================
+// 🛵 RIDER MODEL
+// ==========================================
+model Rider {
+  id             String   @id @default(uuid())
+  name           String
+  phone          String   @unique
+  email          String?  @unique
+  vehicleNumber  String
+  bankDetails    String?  // JSON: bankName, accountNumber, ifsc
+  isPhoneVerified  Boolean @default(false)
+  isEmailVerified  Boolean @default(false)
+  otpCode        String?
+  otpExpiry      DateTime?
+  approvalStatus String   @default("PENDING") // PENDING, APPROVED, REJECTED, INFO_NEEDED
+  adminMessage   String?  // एडमिन → राइडर
+  kycDocuments   String?  // JSON: DL, ID, RC, etc.
+  riderLastMessage String? // राइडर → एडमिन (KYC submit note)
+  kycSubmittedAt DateTime?
+  onDuty         Boolean  @default(false)
+  /** Denormalized: count of orders assigned to this rider that are not terminal */
+  activeOrdersCount Int   @default(0)
+  /** Last known rider position for dispatch distance */
+  latitude       Float?
+  longitude      Float?
+  createdAt      DateTime @default(now())
+  
+  deliveries     Order[]  
 }
 
-enum OrderStatus {
-  PENDING
-  ACCEPTED
-  PREPARING
-  OUT_FOR_DELIVERY
-  DELIVERED
-  REJECTED
+// In-app notifications (polling). audience: ADMIN | CUSTOMER | RIDER | RESTAURANT
+model Notification {
+  id             String   @id @default(uuid())
+  audience       String
+  customerUserId String?
+  riderId        String?
+  restaurantId   String?
+  type           String
+  title          String
+  body           String
+  orderId        String?
+  read           Boolean  @default(false)
+  createdAt      DateTime @default(now())
+}
+
+// ==========================================
+// 🎟️ COUPON MODEL (फ्रंटएंड के अनुसार अपडेटेड)
+// ==========================================
+model Coupon {
+  id            String   @id @default(uuid())
+  code          String   @unique
+  discount      Float
+  type          String   @default("FLAT")     // 👈 FLAT (₹) या PERCENT (%)
+  fundedBy      String   @default("PARTNER")  // 👈 ADMIN = platform; PARTNER = outlet-funded
+  minOrderValue Float
+  isActive      Boolean  @default(true)
+  /** Partner offers: max ₹ reserved from restaurant.marketingWallet while live */
+  budget        Float?
+  restaurantId  String?
+  restaurant    Restaurant? @relation(fields: [restaurantId], references: [id])
+  createdAt     DateTime @default(now())
 }
