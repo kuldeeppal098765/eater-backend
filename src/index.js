@@ -1110,30 +1110,62 @@ app.put("/api/menu/:id", requirePartner, async (req, res) => {
       fullPrice !== undefined
         ? parseFloat(fullPrice)
         : existing.fullPrice;
+    const nextFullPrice = Number.isFinite(finalFullPrice) ? finalFullPrice : existing.fullPrice;
+
+    const nextHalfPrice =
+      halfPrice === null || halfPrice === ""
+        ? null
+        : halfPrice !== undefined
+          ? parseFloat(halfPrice)
+          : existing.halfPrice;
+
+    const nextName = name !== undefined ? String(name) : existing.name;
+    const nextDescription = description !== undefined ? String(description || "") : existing.description;
+    const nextHasHalf = hasHalf !== undefined ? Boolean(hasHalf) : existing.hasHalf;
+    const nextQuantityText =
+      quantityText !== undefined ? String(quantityText || "1 Portion") : existing.quantityText;
+    const nextPhotoUrl = photoUrl !== undefined ? String(photoUrl || "") : existing.photoUrl;
+    const nextCategory = category !== undefined ? String(category || "General") : existing.category;
+    const nextIsVeg = isVeg !== undefined ? Boolean(isVeg) : existing.isVeg;
+    const nextIsAvailable = isAvailable !== undefined ? Boolean(isAvailable) : existing.isAvailable;
+
+    const numHalf = (v) => (v == null || v === "" ? null : Number(v));
+    const halfChanged =
+      numHalf(nextHalfPrice) !== numHalf(existing.halfPrice) ||
+      Boolean(nextHasHalf) !== Boolean(existing.hasHalf);
+
+    const contentChanged =
+      nextName !== existing.name ||
+      nextDescription !== String(existing.description || "") ||
+      nextFullPrice !== existing.fullPrice ||
+      halfChanged ||
+      nextQuantityText !== existing.quantityText ||
+      nextPhotoUrl !== String(existing.photoUrl || "") ||
+      nextCategory !== String(existing.category || "General") ||
+      nextIsVeg !== existing.isVeg;
+
+    const data = {
+      name: nextName,
+      description: nextDescription,
+      fullPrice: nextFullPrice,
+      halfPrice: nextHalfPrice,
+      hasHalf: nextHasHalf,
+      quantityText: nextQuantityText,
+      photoUrl: nextPhotoUrl,
+      category: nextCategory,
+      isVeg: nextIsVeg,
+      isAvailable: nextIsAvailable,
+    };
+    if (contentChanged) data.menuReviewStatus = "PENDING";
 
     const updated = await prisma.menuItem.update({
       where: { id },
-      data: {
-        name: name !== undefined ? String(name) : existing.name,
-        description: description !== undefined ? String(description || "") : existing.description,
-        fullPrice: Number.isFinite(finalFullPrice) ? finalFullPrice : existing.fullPrice,
-        halfPrice:
-          halfPrice === null || halfPrice === ""
-            ? null
-            : halfPrice !== undefined
-              ? parseFloat(halfPrice)
-              : existing.halfPrice,
-        hasHalf: hasHalf !== undefined ? Boolean(hasHalf) : existing.hasHalf,
-        quantityText:
-          quantityText !== undefined ? String(quantityText || "1 Portion") : existing.quantityText,
-        photoUrl: photoUrl !== undefined ? String(photoUrl || "") : existing.photoUrl,
-        category: category !== undefined ? String(category || "General") : existing.category,
-        isVeg: isVeg !== undefined ? Boolean(isVeg) : existing.isVeg,
-        isAvailable: isAvailable !== undefined ? Boolean(isAvailable) : existing.isAvailable,
-        menuReviewStatus: "PENDING",
-      },
+      data,
     });
-    res.json({ message: "Menu item updated; pending review", data: updated });
+    res.json({
+      message: contentChanged ? "Menu item updated; pending review" : "Menu item updated",
+      data: updated,
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
